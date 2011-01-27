@@ -23,8 +23,9 @@ class AdminInstance():
   ssh=None
   __updateCommands=['uname -a','sudo apt-get update -y','sudo apt-get dist-upgrade -y','df -h']
   DNSTUNNEL_DOMAIN='ipdns.rbns.org'
-  DNSTUNNEL_PASSWORD='JAGDLHD848wtdgkq79wtqidgKG'
-  dyndns="aLPCOABSDvjYb1EH5k9h1IaXuFPd3WSbxKo"
+  DNSTUNNEL_KEY=None
+  DNSTUNNEL_SERVERNAME='rbns.dyndns.info'
+  DYNDNS_KEY=None
   def __init__(self,instance,username='ec2-user',keypair='~/.ssh/aws.pem'):
     checkRunning(instance)
     self.instance=instance
@@ -33,6 +34,8 @@ class AdminInstance():
     self.privatekeyfile = os.path.expanduser(keypair)
     self.username=username
     self.log=logging.getLogger(self.__class__.__name__)
+    self.DYNDNS_KEY=os.environ['DYNDNS_KEY']
+    self.DNSTUNNEL_KEY=os.environ['DNSTUNNEL_KEY']
   
   def _connect(self):
     if self.ssh is not None and self.ssh.get_transport() is not None:
@@ -42,11 +45,14 @@ class AdminInstance():
     self.ssh.set_missing_host_key_policy(paramiko.WarningPolicy())
     self.ssh.connect(self.host,username=self.username,pkey = mykey)
   
-  def _execute(self,cmd):
-    self.log.info(cmd)
-    stdin, stdout, stderr = self.ssh.exec_command(cmd)
-    self.log.info(stdout.readlines())
-    self.log.warning(stderr.readlines())
+  def _execute(self,cmds):
+    if type(cmds) not list:
+      cmds=[cmds]
+    for cmd in cmds:
+      self.log.info(cmd)
+      stdin, stdout, stderr = self.ssh.exec_command(cmd)
+      self.log.info(stdout.readlines())
+      self.log.warning(stderr.readlines())
   
   def update(self):
     self._connect()
@@ -57,29 +63,24 @@ class AdminInstance():
   
   def updateSystemPackages(self):
     #update package
-    for cmd in self.__updateCommands:
-      self._execute(cmd)
+    self._execute(self.__updateCommands)
     #ssh.close()
 
   def installSoftware(self):  
-    installCommands=['sudo apt-get install iodine ipcheck',
-    'sudo iodined -P %s %s %s'%(self.DNSTUNNEL_PASSWORD,self.instance.ip_address,self.DNSTUNNEL_DOMAIN)]
-    for cmd in installCommands:
-      self._execute(cmd)    
+    installCommands=['sudo apt-get install iodine ipcheck']
+    self._execute(installCommands)    
 
   def updateDyndns(self):
     #ipcheck._main(['ipcheck','--makedat','-a',self.instance.ip_address, 'rbns',self.dyndns,'rbns.dyndns.info'])
-    commands=['rm ipcheck.dat',
-    'ipcheck --makedat -a %s %s %s %s'%(self.instance.ip_address, 'rbns',self.dyndns,'rbns.dyndns.info') ]
-    for cmd in commands:
-      self._execute(cmd)    
+    commands=['rm -f ipcheck.dat',
+    'ipcheck --makedat -a %s %s %s %s'%(self.instance.ip_address, 'rbns',self.DYNDNS_KEY,self.DNSTUNNEL_SERVERNAME) ]
+    self._execute(commands)    
     pass  
         
   def configureTunnels(self):
     commands=[
-    'sudo iodined -P %s %s %s'%(self.DNSTUNNEL_PASSWORD,self.instance.ip_address,self.DNSTUNNEL_DOMAIN)]
-    for cmd in commands:
-      self._execute(cmd)    
+    'sudo iodined -P %s %s %s'%(self.DNSTUNNEL_KEY,self.instance.ip_address,self.DNSTUNNEL_DOMAIN)]
+    self._execute(commands)    
     
 
 
